@@ -5,7 +5,7 @@
   "main": "electron.js",
   "scripts": {
     "start": "node --experimental-sqlite server.js",
-    "dev": "node --experimental-sqlite server.js",
+    "dev": "node --experimental-sqlite --watch server.js",
     "reset": "node --experimental-sqlite reset-db.js",
     "app": "electron . > debug.log 2>&1",
     "build": "electron-builder --win"

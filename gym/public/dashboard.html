@@ -4,8 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="GymPro Admin Dashboard - Manage members, memberships, and notifications">
-  <title>GymPro - Dashboard</title>
+  <meta name="description" content="Powerzone Fitness Admin Dashboard - Manage members, memberships, and notifications">
+  <title>POWERZONE FITNESS - Dashboard</title>
+  <link rel="icon" type="image/jpeg" href="/images/powerzone_logo.jpg">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 
@@ -16,8 +17,8 @@
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
-        <div class="icon"><img src="/images/fitnesshub.jpg" alt="FIT24 Logo"></div>
-        <h2>FITNESS HUB</h2>
+        <div class="icon"><img src="/images/powerzone_logo.jpg" alt="Powerzone Fitness Logo"></div>
+        <h2>POWERZONE FITNESS</h2>
       </div>
 
       <nav class="nav-menu">
@@ -47,11 +48,11 @@
       <div class="sidebar-footer">
         <div class="admin-info">
           <div class="admin-avatar" id="adminAvatar">
-            <img src="/images/fitnesshub.jpg" alt="Fitnesshub">
+            <img src="/images/powerzone_logo.jpg" alt="Powerzone Admin">
           </div>
           <div>
-            <div class="name" id="adminName">Fitness Hub Admin</div>
-            <div class="role">Database Admin</div>
+            <div class="name" id="adminName">Powerzone Admin</div>
+            <div class="role">System Administrator</div>
           </div>
         </div>
 
@@ -129,6 +130,7 @@
               <select class="filter-select" id="statusFilter">
                 <option value="">All Members</option>
                 <option value="active">Active</option>
+                <option value="frozen">❄️ Frozen</option>
                 <option value="expired">Expired</option>
                 <option value="paid">Paid</option>
                 <option value="due">Outstanding Due</option>
@@ -146,6 +148,7 @@
                   <th>Plan</th>
                   <th>Join Date</th>
                   <th>Expiry Date</th>
+                  <th style="text-align:center;">30d Attendance</th>
                   <th>Membership</th>
                   <th>Payment Status</th>
                   <th>Actions</th>
@@ -214,17 +217,45 @@
         </div>
 
         <!-- Date Tabs & Shift Filter -->
-        <div class="section-card slide-up" style="animation-delay:.2s">
-          <div class="section-header" style="flex-wrap:wrap; gap:12px;">
-            <h2>📅 Attendance Records</h2>
-            <div class="shift-filter">
-              <button class="shift-btn active" data-shift="all">All</button>
-              <button class="shift-btn" data-shift="morning">🌅 Morning</button>
-              <button class="shift-btn" data-shift="day">☀️ Day</button>
+        <div class="section-card slide-up" style="animation-delay:.2s; min-width:0; max-width:100%; overflow:hidden;">
+          <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+              <h2 style="margin:0; font-size:18px;">📅 Attendance Records</h2>
+              <span id="attendanceDateLabel" style="font-size:13px; font-weight:700; color:#10b981; background:rgba(16,185,129,0.12); padding:5px 12px; border-radius:8px; border:1px solid rgba(16,185,129,0.25);">
+                Today
+              </span>
+            </div>
+
+            <!-- Controls: Shift Filter + Sidewise Navigation -->
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+              <!-- Morning & Day Shift Filter (Prominently placed) -->
+              <div class="shift-filter">
+                <button class="shift-btn active" data-shift="all">All Shifts</button>
+                <button class="shift-btn" data-shift="morning">🌅 Morning</button>
+                <button class="shift-btn" data-shift="day">☀️ Day</button>
+              </div>
+
+              <!-- Quick Jump & Navigation Buttons -->
+              <div style="display:inline-flex; align-items:center; gap:6px;">
+                <button class="btn btn-outline btn-sm" id="btnDateScrollLeft" title="Scroll Newer Dates" style="padding:7px 12px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:4px; cursor:pointer;">
+                  ◀ Newer
+                </button>
+                <button class="btn btn-outline btn-sm" id="btnDateJumpToday" title="Jump to Today" style="padding:7px 12px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:4px; cursor:pointer;">
+                  📅 Today
+                </button>
+                <button class="btn btn-outline btn-sm" id="btnDateScrollRight" title="Scroll Older Dates" style="padding:7px 12px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:4px; cursor:pointer;">
+                  Older ▶
+                </button>
+              </div>
             </div>
           </div>
 
-          <div class="date-tabs" id="dateTabs"></div>
+          <!-- Sidewise Scrolling Date Tabs Wrapper with Floating Side Arrows -->
+          <div class="date-tabs-wrapper">
+            <button class="date-tabs-scroll-btn left" id="btnDateArrowLeft" title="Scroll Newer (Left)">❮</button>
+            <div class="date-tabs" id="dateTabs"></div>
+            <button class="date-tabs-scroll-btn right" id="btnDateArrowRight" title="Scroll Older (Right)">❯</button>
+          </div>
 
           <div id="attendanceTableContainer">
             <table class="data-table">
@@ -351,7 +382,29 @@
               <button class="btn btn-primary" id="btnRenewMembership" style="width:auto; font-size:13px; padding:8px 14px;">🔄 Renew</button>
               <button class="btn btn-outline" id="btnRecordPayment" style="width:auto; font-size:13px; padding:8px 14px;">💰 Pay Dues</button>
               <button class="btn btn-outline" id="btnFreezeMembership" style="width:auto; font-size:13px; padding:8px 14px;">❄️ Freeze</button>
+              <button class="btn btn-primary" id="btnUnfreezeMembership" style="width:auto; font-size:13px; padding:8px 14px; background:#0284c7; border-color:#0284c7; display:none;">☀️ Unfreeze</button>
               <button class="btn btn-outline" id="btnEditMemberProfile" style="width:auto; font-size:13px; padding:8px 14px;">✏️ Edit</button>
+              <button class="btn btn-outline" id="btnProfileSendSms" style="width:auto; font-size:13px; padding:8px 14px;">📨 Send SMS</button>
+              <button class="btn btn-outline" id="btnExpireMembership" style="width:auto; font-size:13px; padding:8px 14px; border-color:#ef4444; color:#ef4444;" title="Force Expire Membership (For Testing)">⚡ Expire (Test)</button>
+            </div>
+          </div>
+
+          <!-- Freeze Notification Alert Banner -->
+          <div id="profileFreezeBanner" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; border-left:4px solid #0284c7; border-radius:8px; padding:14px 18px; margin-top:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:26px;">❄️</span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0369a1; letter-spacing:0.3px;">MEMBERSHIP CURRENTLY FROZEN</div>
+                  <div id="profileFreezeDetails" style="font-size:13px; color:#0c4a6e; margin-top:3px;">
+                    Frozen from <strong id="freezeBannerStart">-</strong> until <strong id="freezeBannerEnd">-</strong>. Reason: <span id="freezeBannerReason">-</span>
+                  </div>
+                  <div style="font-size:11px; color:#0284c7; margin-top:2px;">
+                    Biometric door access is suspended. Unfreezing will extend membership by the exact days frozen.
+                  </div>
+                </div>
+              </div>
+              <button type="button" class="btn btn-sm btn-primary" id="btnBannerUnfreeze" style="background:#0284c7; border-color:#0284c7; font-size:12px; padding:6px 16px; width:auto; font-weight:700;">☀️ Unfreeze Now</button>
             </div>
           </div>
 
@@ -367,13 +420,20 @@
               <span class="stat-label">Total Paid Amount</span>
               <span class="stat-value" id="profileStatPaid">NPR 20,000</span>
             </div>
-            <div class="profile-stat-card expiry">
-              <span class="stat-label">Membership Expiry</span>
+            <div class="profile-stat-card expiry" id="profileStatExpiryCard" style="cursor:pointer;" title="Click to edit membership dates">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="stat-label">Membership Expiry</span>
+                <span style="font-size:11px; color:var(--accent); font-weight:700;">✏️ Edit</span>
+              </div>
               <span class="stat-value" id="profileStatExpiry">2026-09-01</span>
             </div>
             <div class="profile-stat-card renewals">
               <span class="stat-label">Total Renewals</span>
               <span class="stat-value" id="profileStatRenewals">3 Times</span>
+            </div>
+            <div class="profile-stat-card attendance">
+              <span class="stat-label">Last 30 Days Attendance</span>
+              <span class="stat-value" id="profileStatAttendance30">0 Days</span>
             </div>
           </div>
         </div>
@@ -389,6 +449,97 @@
 
           <!-- Tab Content Panes -->
           <div class="profile-tab-content active" id="pane-overview">
+            <!-- Dedicated 30-Day Attendance Activity Section -->
+            <div class="section-card attendance-30d-card" style="margin:0 0 24px 0;">
+              <div class="attendance-30d-header">
+                <div class="attendance-30d-title-group">
+                  <div class="attendance-30d-badge-icon">📅</div>
+                  <div>
+                    <h3 style="margin:0; font-size:17px; font-weight:700;">30-Day Attendance Record</h3>
+                    <p style="margin:2px 0 0; font-size:13px; color:var(--text-muted);" id="profileAttendancePeriod">
+                      Last 30 Days Check-in Activity
+                    </p>
+                  </div>
+                </div>
+                <div class="attendance-30d-actions">
+                  <button class="btn btn-outline btn-sm" id="btnViewAttendanceLogTab" style="font-size:12px; padding:6px 14px; cursor:pointer;">
+                    View Detailed Log &rarr;
+                  </button>
+                </div>
+              </div>
+
+              <div class="attendance-30d-banner">
+                <div class="attendance-30d-primary-stat">
+                  <div class="stat-big" id="profile30dDaysCount">0</div>
+                  <div class="stat-unit">
+                    <span class="stat-unit-main">Days Present</span>
+                    <span class="stat-unit-sub" id="profile30dTotalDays">out of last 30 days</span>
+                  </div>
+                </div>
+                
+                <div class="attendance-30d-metrics-divider"></div>
+
+                <div class="attendance-30d-sub-metrics">
+                  <div class="attendance-metric-item">
+                    <span class="metric-icon">📈</span>
+                    <div>
+                      <span class="metric-label">Attendance Rate</span>
+                      <strong class="metric-value" id="profile30dRate">0%</strong>
+                    </div>
+                  </div>
+                  <div class="attendance-metric-item">
+                    <span class="metric-icon">🌅</span>
+                    <div>
+                      <span class="metric-label">Morning Shifts</span>
+                      <strong class="metric-value" id="profile30dMorning">0 days</strong>
+                    </div>
+                  </div>
+                  <div class="attendance-metric-item">
+                    <span class="metric-icon">☀️</span>
+                    <div>
+                      <span class="metric-label">Day Shifts</span>
+                      <strong class="metric-value" id="profile30dDay">0 days</strong>
+                    </div>
+                  </div>
+                  <div class="attendance-metric-item">
+                    <span class="metric-icon">⏱️</span>
+                    <div>
+                      <span class="metric-label">Last Check-in</span>
+                      <strong class="metric-value" id="profile30dLastVisit">Never</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Progress bar -->
+              <div class="attendance-progress-container">
+                <div class="attendance-progress-bar-bg">
+                  <div class="attendance-progress-fill" id="profile30dProgressFill" style="width: 0%;"></div>
+                </div>
+                <div class="attendance-progress-labels">
+                  <span id="profile30dProgressText">0 / 30 Days Attended</span>
+                  <span id="profile30dConsistencyBadge" class="badge">Low Consistency</span>
+                </div>
+              </div>
+
+              <!-- Visual 30-Day Activity Heatmap / Day Grid -->
+              <div class="attendance-30d-grid-wrapper">
+                <div class="attendance-grid-header">
+                  <span style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
+                    Daily Activity Heatmap (Last 30 Days)
+                  </span>
+                  <div class="attendance-legend">
+                    <span class="legend-item"><span class="legend-dot present"></span> Present</span>
+                    <span class="legend-item"><span class="legend-dot absent"></span> Absent</span>
+                    <span class="legend-item"><span class="legend-dot today"></span> Today</span>
+                  </div>
+                </div>
+                <div class="attendance-30d-calendar" id="profile30dCalendarGrid">
+                  <!-- 30 interactive day blocks generated dynamically -->
+                </div>
+              </div>
+            </div>
+
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items: start;">
               <!-- Personal Details Card -->
               <div class="section-card" style="margin:0;">
@@ -448,7 +599,9 @@
                     <th>Discount</th>
                     <th>Payable Amount</th>
                     <th>Total Paid</th>
+                    <th>Remaining Due</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody id="profileMembershipsBody">
@@ -482,15 +635,26 @@
           </div>
 
           <div class="profile-tab-content" id="pane-attendance">
-            <div class="section-card" style="margin:0; padding:16px;">
-              <h3 style="margin-top:0; margin-bottom:16px;">📅 Gym Check-in Attendance logs</h3>
+            <div class="section-card" style="margin:0; padding:20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                <div>
+                  <h3 style="margin:0;">📅 Member Attendance Log</h3>
+                  <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);" id="paneAttendanceSummaryText">
+                    Recorded check-ins and gym visits
+                  </p>
+                </div>
+                <div class="badge active" id="paneAttendanceDaysBadge" style="font-size:13px; padding:6px 14px;">
+                  30-Day Total: 0 Days
+                </div>
+              </div>
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>Date</th>
+                    <th>Day</th>
                     <th>Check-in Time</th>
                     <th>Shift</th>
-                    <th>Device IP</th>
+                    <th>Device IP / Method</th>
                   </tr>
                 </thead>
                 <tbody id="profileAttendanceBody">
@@ -535,8 +699,19 @@
 
         <!-- Dues Table -->
         <div class="section-card">
-          <div class="section-header">
-            <h2>Outstanding Memberships List</h2>
+          <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+            <div>
+              <h2 style="margin:0;">Outstanding Memberships List</h2>
+              <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">Real-time tracking of unpaid balances and overdue member fees</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <input type="text" id="duesSearchInput" class="form-input" placeholder="🔍 Search member name, code, phone..." style="width:250px; height:36px; font-size:13px;">
+              <div class="filter-pills" style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-sm btn-outline dues-filter-btn active" data-filter="all" id="duesFilterAll">All Dues</button>
+                <button type="button" class="btn btn-sm btn-outline dues-filter-btn" data-filter="overdue" id="duesFilterOverdue" style="border-color:#ef4444; color:#ef4444;">⚠️ Overdue</button>
+                <button type="button" class="btn btn-sm btn-outline dues-filter-btn" data-filter="pending" id="duesFilterPending" style="border-color:#f59e0b; color:#f59e0b;">⏳ Pending</button>
+              </div>
+            </div>
           </div>
           <table class="data-table">
             <thead>
@@ -545,7 +720,7 @@
                 <th>Phone</th>
                 <th>Plan Snapshot</th>
                 <th>Expiry Date</th>
-                <th>Due Date</th>
+                <th>Due Date & Status</th>
                 <th>Total Payable</th>
                 <th>Amount Paid</th>
                 <th>Dues Remaining</th>
@@ -558,153 +733,312 @@
           </table>
           <div class="empty-state" id="emptyDuesList" style="display:none;">
             <div class="empty-icon">🎉</div>
-            <h3>No outstanding dues!</h3>
-            <p>All members have paid their active gym fees.</p>
+            <h3 id="emptyDuesTitle">No outstanding dues!</h3>
+            <p id="emptyDuesDesc">All members have paid their active gym fees.</p>
           </div>
         </div>
       </section>
 
       <!-- SETTINGS PAGE -->
       <section class="page-section" id="page-settings">
-        <div class="page-header">
-          <h1>Settings</h1>
-          <p>Manage your account</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div>
+            <h1>Settings &amp; Configuration</h1>
+            <p>Manage membership offer packages, Aakash SMS gateway, biometric hardware, and admin security</p>
+          </div>
         </div>
-        <div class="settings-card" style="margin-bottom: 24px;">
-          <h3>🎁 Manage Offer Packages</h3>
-          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-            Create custom membership packages (like "Dashain Offer") that will appear in the onboarding plan selection list.
-          </p>
-          <form id="createPackageForm" style="margin-bottom: 24px;">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Package Name *</label>
-                <input type="text" class="form-input" id="pkgName" required placeholder="e.g. Dashain Offer">
+
+        <!-- Settings Sub-Navigation Tabs -->
+        <div class="settings-tabs-nav">
+          <button type="button" class="settings-tab-btn active" data-settings-tab="packages">
+            <span class="tab-emoji">🎁</span>
+            <span class="tab-title">Offer Packages</span>
+            <span class="tab-pill" id="settingsPackagesCount">0</span>
+          </button>
+          <button type="button" class="settings-tab-btn" data-settings-tab="sms">
+            <span class="tab-emoji">📱</span>
+            <span class="tab-title">SMS Gateway (Aakash)</span>
+            <span class="tab-pill">API</span>
+          </button>
+          <button type="button" class="settings-tab-btn" data-settings-tab="hikvision">
+            <span class="tab-emoji">🔒</span>
+            <span class="tab-title">Hikvision Biometric</span>
+            <span class="tab-pill">LAN</span>
+          </button>
+          <button type="button" class="settings-tab-btn" data-settings-tab="security">
+            <span class="tab-emoji">🔑</span>
+            <span class="tab-title">Admin &amp; Security</span>
+            <span class="tab-pill">Account</span>
+          </button>
+        </div>
+
+        <!-- PANE 1: OFFER PACKAGES -->
+        <div class="settings-content-pane active" id="settings-pane-packages">
+          <div class="settings-two-col">
+            <!-- Left: Add Package Form -->
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble purple">🎁</div>
+                <div>
+                  <h3>Create Offer Package</h3>
+                  <p>Define custom packages (e.g. Festival Offer) that appear in onboarding and renewals.</p>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Duration (Months) *</label>
-                <input type="number" class="form-input" id="pkgDuration" required min="1" max="100" placeholder="e.g. 3">
-              </div>
-              <div class="form-group">
-                <label>Price (Rs.) *</label>
-                <input type="number" class="form-input" id="pkgPrice" required min="0" placeholder="e.g. 2000">
-              </div>
+
+              <form id="createPackageForm">
+                <div class="form-group" style="margin-bottom: 16px;">
+                  <label>Package Name *</label>
+                  <input type="text" class="form-input" id="pkgName" required placeholder="e.g. Dashain 3-Month Offer">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                  <label>Duration (Months) *</label>
+                  <input type="number" class="form-input" id="pkgDuration" required min="1" max="100" placeholder="e.g. 3">
+                  <div class="preset-chips">
+                    <button type="button" class="preset-chip-btn" onclick="document.getElementById('pkgDuration').value='1'">1 Mo</button>
+                    <button type="button" class="preset-chip-btn" onclick="document.getElementById('pkgDuration').value='3'">3 Mo</button>
+                    <button type="button" class="preset-chip-btn" onclick="document.getElementById('pkgDuration').value='6'">6 Mo</button>
+                    <button type="button" class="preset-chip-btn" onclick="document.getElementById('pkgDuration').value='12'">1 Year</button>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 24px;">
+                  <label>Price (NPR) *</label>
+                  <input type="number" class="form-input" id="pkgPrice" required min="0" placeholder="e.g. 5000">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">➕ Save Offer Package</button>
+              </form>
             </div>
-            <button type="submit" class="btn btn-primary" style="width: auto;">➕ Add Package</button>
-          </form>
-          
-          <div class="packages-list-container">
-            <h4>Active Custom Packages</h4>
-            <div class="table-container" style="margin-top: 10px; box-shadow: none; border: 1px solid var(--glass-border);">
-              <table style="width:100%;">
-                <thead>
-                  <tr>
-                    <th>Package Name</th>
-                    <th>Duration</th>
-                    <th>Price</th>
-                    <th style="width: 80px; text-align: center;">Action</th>
-                  </tr>
-                </thead>
-                <tbody id="packagesListBody">
-                  <!-- Custom packages list will load here dynamically -->
-                </tbody>
-              </table>
-              <div id="emptyPackagesState" style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">
-                No custom packages created yet. Add one above!
+
+            <!-- Right: Active Packages Catalog -->
+            <div class="settings-panel" style="min-width: 0;">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble green">📋</div>
+                <div>
+                  <h3>Active Packages Catalog</h3>
+                  <p>All configured membership plans available across the system</p>
+                </div>
+              </div>
+
+              <div class="table-container" style="box-shadow: none; border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
+                <table style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th style="padding: 14px 18px;">Package Name</th>
+                      <th style="padding: 14px 18px;">Duration</th>
+                      <th style="padding: 14px 18px;">Price</th>
+                      <th style="padding: 14px 18px; width: 80px; text-align: center;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="packagesListBody">
+                    <!-- Dynamic packages list -->
+                  </tbody>
+                </table>
+                <div id="emptyPackagesState" style="text-align: center; padding: 36px 20px; color: var(--text-muted); font-size: 13px; display: none;">
+                  <div style="font-size: 32px; margin-bottom: 8px;">🎁</div>
+                  <strong>No custom offer packages yet</strong>
+                  <p style="margin: 4px 0 0 0;">Create your first package using the form on the left.</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="settings-card">
-          <h3>🔑 Change Password</h3>
-          <form id="passwordForm">
-            <div class="form-group">
-              <label>Current Password</label>
-              <input type="password" class="form-input" id="currentPassword" required>
-            </div>
-            <div class="form-group">
-              <label>New Password</label>
-              <input type="password" class="form-input" id="newPassword" required minlength="6">
-            </div>
-            <div class="form-group">
-              <label>Confirm New Password</label>
-              <input type="password" class="form-input" id="confirmPassword" required minlength="6">
-            </div>
-            <button type="submit" class="btn btn-primary" style="width:auto;">Update Password</button>
-          </form>
-        </div>
-
-        <div class="settings-card" style="margin-top: 24px;">
-          <h3>🔒 Hikvision Hardware Settings</h3>
-          <form id="hikvisionForm">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Device IP Address</label>
-                <input type="text" class="form-input" id="hikIp" placeholder="192.168.1.182">
-              </div>
-              <div class="form-group">
-                <label>Device Port</label>
-                <input type="text" class="form-input" id="hikPort" placeholder="80">
+        <!-- PANE 2: AAKASH SMS GATEWAY -->
+        <div class="settings-content-pane" id="settings-pane-sms">
+          <!-- Public IP Status Banner -->
+          <div class="ip-banner-card">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <div class="panel-icon-bubble purple" style="font-size:24px;">📡</div>
+              <div>
+                <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Gym Computer Public IP Address</div>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:4px;">
+                  <span id="diagnoseIp" style="font-family:monospace; font-size:18px; font-weight:800; color:#10b981;">Loading...</span>
+                  <button type="button" class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('diagnoseIp').textContent); showToast('IP copied to clipboard!', 'success');" style="padding:3px 10px; font-size:11px;">📋 Copy</button>
+                </div>
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Username</label>
-                <input type="text" class="form-input" id="hikUsername" placeholder="admin">
-              </div>
-              <div class="form-group">
-                <label>Password</label>
-                <input type="password" class="form-input" id="hikPassword" placeholder="********">
-              </div>
-            </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 24px;">
-              <button type="button" class="btn btn-secondary" id="hikTestBtn" style="width: auto;">📡 Test
-                Connection</button>
-              <button type="submit" class="btn btn-primary" style="width: auto;">💾 Save Settings</button>
-            </div>
-
-
-          </form>
-        </div>
-
-        <div class="settings-card" style="margin-top: 24px;">
-          <h3>📱 Aakash SMS Configuration</h3>
-          <form id="smsSettingsForm">
-            <div class="form-group">
-              <label>Aakash SMS Auth Token</label>
-              <input type="password" class="form-input" id="smsAuthToken" placeholder="Enter your Aakash SMS Auth Token"
-                required>
-            </div>
-            <button type="submit" class="btn btn-primary" style="width: auto;">💾 Save SMS Token</button>
-          </form>
-        </div>
-
-        <div class="settings-card" style="margin-top: 24px;">
-          <h3>📱 Aakash SMS Diagnostics & Troubleshooting</h3>
-          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-            Aakash SMS requires your gym computer's public IP address to be whitelisted in your Aakash SMS user panel.
-            If the IP address does not match, SMS notifications will fail to send.
-          </p>
-          <div
-            style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid var(--purple);">
-            <div style="margin-bottom: 6px; font-weight: 500; font-size: 14px;">💻 Gym Computer Public IP: <span
-                id="diagnoseIp"
-                style="font-family: monospace; color: var(--purple); font-weight: bold; font-size: 15px;">Loading...</span>
-            </div>
-            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;">
-              ℹ️ Copy this IP and paste it into your <strong>Aakash SMS User Panel -> Whitelist IPs</strong> list!
+            <div style="font-size:12px; color:var(--text-muted); max-width:480px; line-height:1.4;">
+              ℹ️ Aakash SMS requires this exact public IP to be whitelisted in your <strong>Aakash SMS Portal ➔ Whitelist IPs</strong>. If your gym router restarts and changes IP, update it there!
             </div>
           </div>
 
-          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <button type="button" class="btn btn-secondary" id="smsDiagnoseBtn" style="width: auto;">🔍 Run Diagnostic
-              Check</button>
-            <button type="button" class="btn btn-primary" id="smsTestBtn" style="width: auto;">📨 Send Test SMS</button>
-          </div>
+          <div class="settings-two-col">
+            <!-- Left: SMS Auth Token -->
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble green">🔑</div>
+                <div>
+                  <h3>Aakash SMS Credentials</h3>
+                  <p>Configure API authentication token provided by Aakash SMS</p>
+                </div>
+              </div>
 
-          <div id="diagnoseResult"
-            style="margin-top: 16px; display: none; padding: 12px; border-radius: 6px; font-size: 13px; font-family: monospace; line-height: 1.5; white-space: pre-wrap;">
+              <form id="smsSettingsForm">
+                <div class="form-group" style="margin-bottom: 20px;">
+                  <label>Aakash SMS Auth Token *</label>
+                  <input type="password" class="form-input" id="smsAuthToken" placeholder="Enter your 64-character Auth Token" required>
+                  <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+                    This token is encrypted and stored in your local gym database.
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">💾 Save SMS Auth Token</button>
+              </form>
+            </div>
+
+            <!-- Right: Diagnostics & Test SMS -->
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble blue">🧪</div>
+                <div>
+                  <h3>Diagnostics &amp; Test Tool</h3>
+                  <p>Verify SMS connection and send a test message to your mobile phone</p>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+                <button type="button" class="btn btn-secondary" id="smsDiagnoseBtn" style="flex:1; white-space:nowrap;">🔍 Run Server Diagnostic</button>
+                <button type="button" class="btn btn-primary" id="smsTestBtn" style="flex:1; white-space:nowrap;">📨 Send Test SMS</button>
+              </div>
+
+              <div id="diagnoseResult" class="diag-terminal-box" style="display:none;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE 3: HIKVISION BIOMETRIC HARDWARE -->
+        <div class="settings-content-pane" id="settings-pane-hikvision">
+          <div class="settings-two-col">
+            <!-- Left: Hardware Connection Settings -->
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble amber">🔒</div>
+                <div>
+                  <h3>Hikvision Hardware Settings</h3>
+                  <p>Biometric turnstile/terminal ISAPI network parameters</p>
+                </div>
+              </div>
+
+              <form id="hikvisionForm">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Device IP Address</label>
+                    <input type="text" class="form-input" id="hikIp" placeholder="192.168.1.182">
+                  </div>
+                  <div class="form-group">
+                    <label>Device Port</label>
+                    <input type="text" class="form-input" id="hikPort" placeholder="80">
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Device Username</label>
+                    <input type="text" class="form-input" id="hikUsername" placeholder="admin">
+                  </div>
+                  <div class="form-group">
+                    <label>Device Password</label>
+                    <input type="password" class="form-input" id="hikPassword" placeholder="********">
+                  </div>
+                </div>
+
+                <div style="display:flex; gap:12px; margin-top:12px;">
+                  <button type="button" class="btn btn-secondary" id="hikTestBtn" style="flex:1;">📡 Test Connection</button>
+                  <button type="submit" class="btn btn-primary" style="flex:1;">💾 Save Settings</button>
+                </div>
+                <button type="button" class="btn btn-outline" id="hikBackupBiometricsBtn" style="width:100%; margin-top:10px; font-size:12px; font-weight:600;">📥 Backup All Biometrics to Database</button>
+              </form>
+            </div>
+
+            <!-- Right: Hardware Status & Overview -->
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble green">⚡</div>
+                <div>
+                  <h3>Biometric Access Control</h3>
+                  <p>Real-time turnstile sync &amp; automatic member lock</p>
+                </div>
+              </div>
+
+              <div style="background:rgba(16, 185, 129, 0.05); border:1px solid rgba(16, 185, 129, 0.2); border-radius:12px; padding:16px; margin-bottom:12px;">
+                <div style="font-weight:700; font-size:13px; color:#065f46; margin-bottom:4px;">✅ Active Polling &amp; Sync</div>
+                <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                  The system polls attendance from the Hikvision terminal every 15 seconds. When a member's plan expires, their biometric door access is automatically revoked until renewed.
+                </div>
+              </div>
+
+              <div style="background:rgba(59, 130, 246, 0.05); border:1px solid rgba(59, 130, 246, 0.2); border-radius:12px; padding:16px; margin-bottom:16px;">
+                <div style="font-weight:700; font-size:13px; color:#1e40af; margin-bottom:4px;">🔄 Biometric Auto-Restore</div>
+                <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                  When anyone expires, their name and biometric credentials are removed from the machine and preserved in the local database. When renewed, their biometric credentials automatically reappear at the machine!
+                </div>
+              </div>
+
+              <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+                <strong>Troubleshooting Tip:</strong> Ensure this gym PC and the Hikvision device are connected to the same local network router / switch.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE 4: ADMIN & SECURITY -->
+        <div class="settings-content-pane" id="settings-pane-security">
+          <div class="settings-two-col">
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble purple">🔑</div>
+                <div>
+                  <h3>Change Admin Password</h3>
+                  <p>Update administrator login credentials for this system</p>
+                </div>
+              </div>
+
+              <form id="passwordForm">
+                <div class="form-group">
+                  <label>Current Password *</label>
+                  <input type="password" class="form-input" id="currentPassword" required>
+                </div>
+                <div class="form-group">
+                  <label>New Password * (min 6 characters)</label>
+                  <input type="password" class="form-input" id="newPassword" required minlength="6">
+                </div>
+                <div class="form-group" style="margin-bottom:24px;">
+                  <label>Confirm New Password *</label>
+                  <input type="password" class="form-input" id="confirmPassword" required minlength="6">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Update Password</button>
+              </form>
+            </div>
+
+            <div class="settings-panel">
+              <div class="settings-panel-header">
+                <div class="panel-icon-bubble blue">🛡️</div>
+                <div>
+                  <h3>System Status &amp; Environment</h3>
+                  <p>Core gym management software status</p>
+                </div>
+              </div>
+
+              <div class="details-list">
+                <div class="detail-row">
+                  <span class="detail-label">Software</span>
+                  <strong class="detail-value">Powerzone Fitness System v1.0</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Database</span>
+                  <strong class="detail-value" style="color:var(--green);">SQLite (Local &amp; Secure)</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">SMS Gateway</span>
+                  <strong class="detail-value">Aakash SMS (Nepal)</strong>
+                </div>
+                <div class="detail-row no-border">
+                  <span class="detail-label">Biometric Device</span>
+                  <strong class="detail-value">Hikvision ISAPI</strong>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -807,12 +1141,43 @@
           </div>
           
           <div id="onboardingPaymentSection">
-            <h4 style="margin-top:20px; margin-bottom:10px; font-size:14px; border-bottom:1px solid var(--border); padding-bottom:6px;">💰 Initial Payment / Fees</h4>
+            <h4 style="margin-top:20px; margin-bottom:10px; font-size:14px; border-bottom:1px solid var(--border); padding-bottom:6px;">💰 Membership Fee & Payment</h4>
+            
             <div class="form-row">
               <div class="form-group">
-                <label>Amount Paid Now (NPR)</label>
-                <input type="number" class="form-input" id="memberAmountPaid" min="0" placeholder="e.g. 10000" value="0">
+                <label>Total Membership Fee (NPR) *</label>
+                <input type="number" class="form-input" id="memberPayableAmount" min="0" placeholder="e.g. 2000" value="2000">
+                <span style="font-size:11px; color:var(--text-muted); margin-top:2px; display:block;">Auto-filled from selected plan. Editable for custom pricing.</span>
               </div>
+              <div class="form-group">
+                <label>Amount Paid Now (NPR) *</label>
+                <input type="number" class="form-input" id="memberAmountPaid" min="0" placeholder="e.g. 2000" value="2000">
+                <div style="display:flex; justify-content:space-between; margin-top:4px;">
+                  <a href="javascript:void(0)" id="paidFullBtn" style="font-size:11px; color:var(--accent); text-decoration:none; font-weight:600;">⚡ Paid in Full</a>
+                  <a href="javascript:void(0)" id="paidZeroBtn" style="font-size:11px; color:#ef4444; text-decoration:none; font-weight:600;">❌ Fully Unpaid (Rs. 0)</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Real-time Remainder & Dues Notification Card -->
+            <div id="onboardingRemainderCard" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 16px; margin:12px 0 16px; transition:all 0.2s ease;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div>
+                  <span style="font-size:11px; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Remaining Balance / Dues:</span>
+                  <div id="onboardingRemainderText" style="font-size:18px; font-weight:800; color:#15803d; margin-top:2px;">
+                    Rs. 0 <span style="font-size:12px; font-weight:500; color:#16a34a;">(Fully Settled)</span>
+                  </div>
+                </div>
+                <div id="onboardingRemainderStatusBadge" class="badge" style="background:#16a34a; color:white; font-size:11px; padding:4px 10px; font-weight:700;">
+                  PAID IN FULL
+                </div>
+              </div>
+              <div id="onboardingDueDateAlert" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed #fde68a; font-size:12px; color:#b45309;">
+                📅 <strong>Payment Reminder:</strong> Customer owes <strong id="onboardingRemainderAmountDue" style="color:#ef4444;">Rs. 0</strong>. Next payment will be due on <strong id="onboardingDueDatePreview" style="color:var(--text-primary); text-decoration:underline;">selected date</strong>.
+              </div>
+            </div>
+
+            <div class="form-row">
               <div class="form-group">
                 <label>Payment Method</label>
                 <select class="form-input" id="memberPaymentMethod">
@@ -823,15 +1188,24 @@
                   <option value="Other">Other</option>
                 </select>
               </div>
+              <div class="form-group" id="onboardingDueDateGroup">
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Payment Due Date <span id="dueDateRequiredIndicator" style="color:#ef4444; display:none;">*</span></span>
+                  <span id="dueDateStatusTag" style="font-size:11px; color:var(--text-muted); font-weight:normal;">(When remainder is due)</span>
+                </label>
+                <input type="date" class="form-input" id="memberPaymentDueDate">
+                <div id="dueDateShortcuts" style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-outline btn-sm due-shortcut-btn" data-days="7" style="padding:2px 8px; font-size:11px;">+7 Days</button>
+                  <button type="button" class="btn btn-outline btn-sm due-shortcut-btn" data-days="15" style="padding:2px 8px; font-size:11px;">+15 Days</button>
+                  <button type="button" class="btn btn-outline btn-sm due-shortcut-btn" data-days="30" style="padding:2px 8px; font-size:11px;">+1 Month</button>
+                  <button type="button" class="btn btn-outline btn-sm due-shortcut-btn" data-days="expiry" style="padding:2px 8px; font-size:11px;">On Expiry</button>
+                </div>
+              </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Transaction Reference (Optional)</label>
                 <input type="text" class="form-input" id="memberTransactionRef" placeholder="e.g. Txn-908123">
-              </div>
-              <div class="form-group">
-                <label>Payment Due Date (If unpaid/partially paid)</label>
-                <input type="date" class="form-input" id="memberPaymentDueDate">
               </div>
             </div>
           </div>
@@ -1088,6 +1462,10 @@
           <input type="hidden" id="recordPayMembershipId">
           <div style="background:#f9fafb; padding:12px; border-radius:6px; border:1px solid #f3f4f6; margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:14px;">
+              <span style="color:var(--text-muted);">Member:</span>
+              <strong id="recordPayMemberName" style="color:var(--text-primary);">-</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:14px;">
               <span style="color:var(--text-muted);">Membership Plan:</span>
               <strong id="recordPayPlanName">Custom Plan</strong>
             </div>
@@ -1099,6 +1477,9 @@
           <div class="form-group">
             <label>Amount to Pay *</label>
             <input type="number" class="form-input" id="recordPayAmount" required min="1" step="0.1" placeholder="e.g. 5000">
+            <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+              <a href="javascript:void(0)" id="recordPayFullBtn" style="font-size:11px; color:var(--accent); text-decoration:none; font-weight:600;">⚡ Pay Full Remaining Balance</a>
+            </div>
           </div>
           <div class="form-group">
             <label>Payment Method *</label>
@@ -1129,7 +1510,7 @@
 
   <!-- FREEZE MEMBERSHIP MODAL -->
   <div class="modal-overlay" id="freezeMembershipModal">
-    <div class="modal" style="max-width: 440px;">
+    <div class="modal" style="max-width: 480px;">
       <div class="modal-header">
         <h2>❄️ Freeze Membership</h2>
         <button class="modal-close" id="freezeModalClose">✕</button>
@@ -1137,18 +1518,118 @@
       <form id="freezeMembershipForm">
         <div class="modal-body">
           <input type="hidden" id="freezeMembershipId">
+          <input type="hidden" id="freezeOriginalEndDate">
+          
           <div class="form-group">
             <label>Freeze Duration (Days) *</label>
             <input type="number" class="form-input" id="freezeDays" required min="1" max="180" placeholder="e.g. 15">
+            <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm freeze-shortcut-btn" data-days="7" style="padding:2px 8px; font-size:11px;">+7 Days</button>
+              <button type="button" class="btn btn-outline btn-sm freeze-shortcut-btn" data-days="15" style="padding:2px 8px; font-size:11px;">+15 Days</button>
+              <button type="button" class="btn btn-outline btn-sm freeze-shortcut-btn" data-days="30" style="padding:2px 8px; font-size:11px;">+1 Month</button>
+              <button type="button" class="btn btn-outline btn-sm freeze-shortcut-btn" data-days="60" style="padding:2px 8px; font-size:11px;">+2 Months</button>
+            </div>
           </div>
+
+          <!-- Live Expiry Preview Box -->
+          <div id="freezePreviewBox" style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px;">
+              <span style="color:var(--text-muted);">Current Expiry:</span>
+              <strong id="freezeCurrentExpiryText">-</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px;">
+              <span style="color:var(--text-muted);">Scheduled Resume Date:</span>
+              <strong id="freezeResumeDateText" style="color:#0284c7;">-</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:13px; padding-top:4px; border-top:1px dashed #bae6fd;">
+              <span style="color:var(--text-muted);">Tentative Extended Expiry:</span>
+              <strong id="freezeNewExpiryText" style="color:var(--green);">-</strong>
+            </div>
+          </div>
+
           <div class="form-group">
             <label>Reason for Freezing *</label>
-            <input type="text" class="form-input" id="freezeReason" required placeholder="e.g. Medical injury / Travel">
+            <input type="text" class="form-input" id="freezeReason" required placeholder="e.g. Medical injury / Travel / Exams">
+          </div>
+
+          <div style="font-size:11px; color:var(--text-muted); line-height:1.4; background:#fafafa; padding:8px 10px; border-radius:6px; border:1px solid #eee;">
+            ℹ️ Biometric entrance access is suspended while frozen. If member returns early, clicking 'Unfreeze' extends the membership by the exact days elapsed.
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="freezeModalCancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" style="width:auto;">Freeze Now</button>
+          <button type="submit" class="btn btn-primary" style="width:auto; background:#0284c7; border-color:#0284c7;">❄️ Freeze Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- UNFREEZE MEMBERSHIP MODAL -->
+  <div class="modal-overlay" id="unfreezeMembershipModal">
+    <div class="modal" style="max-width: 440px;">
+      <div class="modal-header">
+        <h2>☀️ Unfreeze Membership</h2>
+        <button class="modal-close" id="unfreezeModalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="unfreezeMembershipId">
+        <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:14px; margin-bottom:16px;">
+          <div style="font-weight:700; color:#0369a1; font-size:14px; margin-bottom:6px;">Resume Membership for <span id="unfreezeMemberName">Member</span>?</div>
+          <div style="font-size:13px; color:#0c4a6e; line-height:1.5;">
+            <div>❄️ Frozen on: <strong id="unfreezeStartDate">-</strong></div>
+            <div>⏱️ Days frozen so far: <strong id="unfreezeDaysElapsed">0</strong> days</div>
+            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #bae6fd;">
+              📅 New Expiry Date: <strong id="unfreezeNewExpiry" style="color:var(--green);">-</strong>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); line-height:1.4;">
+          This will reactivate member status to <strong>ACTIVE</strong>, extend their membership expiry date by the actual days frozen, and immediately restore biometric entrance access.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="unfreezeModalCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="unfreezeConfirmBtn" style="width:auto; background:#0284c7; border-color:#0284c7;">☀️ Unfreeze &amp; Restore Access</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUICK EDIT MEMBERSHIP DATES MODAL -->
+  <div class="modal-overlay" id="editDatesModal">
+    <div class="modal" style="max-width: 440px;">
+      <div class="modal-header">
+        <h2>📅 Edit Membership Dates</h2>
+        <button class="modal-close" id="editDatesModalClose">✕</button>
+      </div>
+      <form id="editDatesForm">
+        <div class="modal-body">
+          <input type="hidden" id="editDatesMembershipId">
+          <p style="font-size:13px; color:var(--text-muted); margin-top:0; margin-bottom:14px;">
+            Freely set the Start Date and Expiry Date for <strong id="editDatesPlanName" style="color:var(--text);">Package</strong>.
+          </p>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label>Start / Joining Date *</label>
+            <input type="date" class="form-input" id="editDatesStartDate" required>
+          </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label>Expiry / End Date *</label>
+            <input type="date" class="form-input" id="editDatesEndDate" required>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+            <span style="font-size:11px; color:var(--text-muted); width:100%;">Quick presets from Start Date:</span>
+            <button type="button" class="btn btn-sm btn-outline date-preset-btn" data-months="1">+1 Month</button>
+            <button type="button" class="btn btn-sm btn-outline date-preset-btn" data-months="3">+3 Months</button>
+            <button type="button" class="btn btn-sm btn-outline date-preset-btn" data-months="6">+6 Months</button>
+            <button type="button" class="btn btn-sm btn-outline date-preset-btn" data-months="12">+1 Year</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btnPresetYesterday" style="border-color:#ef4444; color:#ef4444;">⚡ Yesterday (Expire)</button>
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); line-height:1.4;">
+            💡 Updating these dates immediately updates the member profile, active membership status, and synchronizes access to the Hikvision biometric device.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="editDatesModalCancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">💾 Save Dates</button>
         </div>
       </form>
     </div>

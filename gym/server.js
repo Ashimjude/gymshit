@@ -173,6 +173,18 @@ app.post('/api/members', requireAuth, (req, res) => {
     let planId = plan ? plan.id : null;
     let price = plan ? plan.regular_price : 0;
 
+    const clientPayable = parseFloat(req.body.final_payable_amount || req.body.price);
+    if (!isNaN(clientPayable) && clientPayable > 0) {
+      price = clientPayable;
+    } else if (price === 0) {
+      const dur = parseInt(duration_months) || 1;
+      if (dur === 1) price = 2000;
+      else if (dur === 3) price = 5500;
+      else if (dur === 6) price = 10000;
+      else if (dur === 12) price = 18000;
+      else price = dur * 2000;
+    }
+
     const membershipDetails = {
       start_date: join_date,
       end_date: finalExpiry,
@@ -182,7 +194,7 @@ app.post('/api/members', requireAuth, (req, res) => {
       final_payable_amount: price,
       payment_due_date: payment_due_date || finalExpiry,
       plan_name_snapshot: plan_type || 'Monthly',
-      notes: 'Initial membership on onboarding'
+      notes: notes || 'Initial membership on onboarding'
     };
 
     const paymentDetails = {
@@ -232,19 +244,88 @@ app.put('/api/members/:id', requireAuth, (req, res) => {
     }
 
     const updatedJoinDate = join_date || existing.join_date;
-    const updatedDuration = duration_months ? parseInt(duration_months) : existing.duration_months;
 
+    // Allow user/admin to set any custom expiry_date freely without forced recalculation
     let finalExpiry = existing.expiry_date;
     if (expiry_date) {
       finalExpiry = expiry_date;
     } else if (join_date || duration_months) {
-      finalExpiry = db.getExpiryDate(updatedJoinDate, updatedDuration).toISOString().split('T')[0];
+      const dur = duration_months ? parseInt(duration_months) : (existing.duration_months || 1);
+      finalExpiry = db.getExpiryDate(updatedJoinDate, dur).toISOString().split('T')[0];
     }
 
-    let finalStatus = status || existing.status;
+    let updatedDuration = existing.duration_months || 1;
+    if (duration_months && duration_months !== 'custom') {
+      updatedDuration = parseInt(duration_months);
+    } else if (updatedJoinDate && finalExpiry) {
+      const s = new Date(updatedJoinDate);
+      const e = new Date(finalExpiry);
+      if (!isNaN(s) && !isNaN(e)) {
+        updatedDuration = Math.max(1, Math.round((e - s) / (1000 * 60 * 60 * 24 * 30)));
+      }
+    }
+
+    const todayStr = db.getLocalDateStr(new Date());
+    let finalStatus = status;
+    if (!finalStatus) {
+      if (existing.status === 'frozen') {
+        finalStatus = 'frozen';
+      } else if (finalExpiry >= todayStr) {
+        finalStatus = 'active';
+      } else {
+        finalStatus = 'expired';
+      }
+    }
+
     const protectedNames = ['saurav kunwar', 'ashim pandey'];
     if (protectedNames.includes(existing.full_name.toLowerCase()) || (full_name && protectedNames.includes(full_name.toLowerCase()))) {
       finalStatus = 'active';
+    }
+
+    const firstJoin = req.body.first_joining_date || (join_date ? join_date : existing.first_joining_date);
+
+    // ── Synchronize memberships table so profile, dues, and turnstiles reflect the updated dates ──
+    const targetMsStatus = (finalStatus === 'frozen') ? 'FROZEN' : (finalExpiry >= todayStr ? 'ACTIVE' : 'EXPIRED');
+    
+    const currentMs = db.db.prepare(`
+      SELECT * FROM memberships
+      WHERE member_id = ?
+      ORDER BY (CASE WHEN membership_status = 'ACTIVE' THEN 1 WHEN membership_status = 'FROZEN' THEN 2 ELSE 3 END),
+               start_date DESC, id DESC
+      LIMIT 1
+    `).get(id);
+
+    if (currentMs) {
+      db.db.prepare(`
+        UPDATE memberships
+        SET start_date = ?,
+            end_date = ?,
+            membership_status = ?,
+            plan_name_snapshot = COALESCE(?, plan_name_snapshot),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(updatedJoinDate, finalExpiry, targetMsStatus, plan_type || null, currentMs.id);
+
+      if (currentMs.payment_due_date === currentMs.end_date) {
+        db.db.prepare('UPDATE memberships SET payment_due_date = ? WHERE id = ?').run(finalExpiry, currentMs.id);
+      }
+    } else {
+      db.createMembership(id, null, {
+        start_date: updatedJoinDate,
+        end_date: finalExpiry,
+        original_price: 2000,
+        discount_type: 'NONE',
+        discount_amount: 0,
+        final_payable_amount: 2000,
+        payment_due_date: finalExpiry,
+        plan_name_snapshot: plan_type || existing.plan_type || 'Monthly',
+        notes: 'Initial membership record on date edit'
+      }, {
+        amount_paid: 2000,
+        payment_method: 'Cash',
+        transaction_reference: '',
+        notes: 'Initial payment'
+      }, req.session?.adminUsername || 'Admin');
     }
 
     const member = db.updateMember(id, {
@@ -262,14 +343,21 @@ app.put('/api/members/:id', requireAuth, (req, res) => {
       member_code: existing.member_code,
       date_of_birth: date_of_birth !== undefined ? date_of_birth : existing.date_of_birth,
       gender: gender !== undefined ? gender : existing.gender,
-      first_joining_date: existing.first_joining_date,
+      first_joining_date: firstJoin,
       emergency_contact_name: emergency_contact_name !== undefined ? emergency_contact_name : existing.emergency_contact_name,
       emergency_contact_phone: emergency_contact_phone !== undefined ? emergency_contact_phone : existing.emergency_contact_phone,
       is_active: is_active !== undefined ? parseInt(is_active) : existing.is_active
     });
 
-    // Sync to Hikvision automatically
-    hikvision.syncMemberToDevice(member);
+    // Refresh all membership statuses and dues in db
+    db.updateMembershipStatuses();
+
+    // Sync updated expiry date directly to Hikvision biometric device
+    try {
+      hikvision.syncMemberToDevice(member);
+    } catch (hErr) {
+      console.error('[Hikvision Sync Error on Member Edit]:', hErr.message);
+    }
 
     res.json(member);
   } catch (err) {
@@ -315,8 +403,11 @@ app.post('/api/members/:id/notify', requireAuth, async (req, res) => {
   }
 
   try {
-    const result = await notifyMember(member, req.body.type || 'expiry_warning', true);
+    const result = await notifyMember(member, req.body.type || 'manual_reminder', req.body.force === true);
     if (result && result.success === false) {
+      if (result.reason === 'already_notified') {
+        return res.status(400).json({ error: 'An SMS has already been sent to this member today. Only 1 message can be sent per day.' });
+      }
       return res.status(400).json({ error: result.error || 'Failed to send notification.' });
     }
     res.json({ success: true, message: `Notification sent to ${member.full_name}.` });
@@ -428,7 +519,7 @@ app.delete('/api/attendance/:id', requireAuth, (req, res) => {
 });
 
 app.get('/api/attendance/summary', requireAuth, (req, res) => {
-  const days = parseInt(req.query.days) || 7;
+  const days = parseInt(req.query.days) || 30;
   const summary = db.getAttendanceSummary(days);
   res.json(summary);
 });
@@ -753,7 +844,19 @@ app.get('/api/members/:id/payments', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/members/:id/renew', requireAuth, (req, res) => {
+app.get('/api/members/:id/attendance', requireAuth, (req, res) => {
+  try {
+    const memberId = parseInt(req.params.id);
+    const days = parseInt(req.query.days) || 30;
+    const stats = db.getMemberAttendanceStats(memberId, days);
+    const logs = db.getMemberAttendanceHistory(memberId, 100);
+    res.json({ success: true, stats, logs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/members/:id/renew', requireAuth, async (req, res) => {
   const memberId = parseInt(req.params.id);
   const { 
     plan_id, start_date, end_date, original_price, discount_type, discount_amount, 
@@ -794,11 +897,124 @@ app.post('/api/members/:id/renew', requireAuth, (req, res) => {
     const adminUser = req.session && req.session.adminUsername ? req.session.adminUsername : 'Admin';
     const membershipId = db.renewMembership(memberId, plan_id, details, paymentDetails, adminUser);
     
-    // Update main member expiration dates back to members table for UI
-    db.db.prepare('UPDATE members SET join_date = ?, duration_months = ?, expiry_date = ?, plan_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(start_date, details.discount_type === 'PERCENT' ? 12 : 3, end_date, planName, memberId);
+    let renewalDurationMonths = 1;
+    if (plan_id) {
+      const planRow = db.db.prepare('SELECT duration_value, duration_type FROM plans WHERE id = ?').get(plan_id);
+      if (planRow && planRow.duration_value) {
+        renewalDurationMonths = planRow.duration_type === 'YEAR' ? planRow.duration_value * 12 : planRow.duration_value;
+      }
+    } else {
+      const sDate = new Date(start_date);
+      const eDate = new Date(end_date);
+      renewalDurationMonths = Math.max(1, Math.round((eDate - sDate) / (1000 * 60 * 60 * 24 * 30)));
+    }
 
-    res.status(201).json({ success: true, membershipId });
+    // Update main member expiration dates back to members table for UI
+    db.db.prepare('UPDATE members SET join_date = ?, duration_months = ?, expiry_date = ?, plan_type = ?, status = \'active\', updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(start_date, renewalDurationMonths, end_date, planName, memberId);
+
+    db.updatePaymentStatuses();
+
+    // Automatically re-enable user and restore their biometrics back to Hikvision machine!
+    const updatedMember = db.getMemberById(memberId);
+    let hikvisionResult = { success: true };
+    try {
+      hikvisionResult = await hikvision.syncMemberToDevice(updatedMember);
+    } catch (hErr) {
+      console.error('[Hikvision Renewal Sync Error]:', hErr.message);
+      hikvisionResult = { success: false, message: hErr.message };
+    }
+
+    res.status(201).json({ success: true, membershipId, hikvision: hikvisionResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Force expire membership for testing purposes (updates records, statuses, and revokes biometric door access)
+app.post('/api/members/:id/expire', requireAuth, async (req, res) => {
+  const memberId = parseInt(req.params.id);
+  const member = db.getMemberById(memberId);
+  if (!member) {
+    return res.status(404).json({ error: 'Member not found.' });
+  }
+
+  try {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = db.getLocalDateStr(yesterday);
+    const adminUser = req.session && req.session.adminUsername ? req.session.adminUsername : 'Admin';
+
+    // 1. Update all active/frozen/upcoming memberships for this member to EXPIRED
+    const activeMemberships = db.db.prepare(`
+      SELECT id FROM memberships WHERE member_id = ? AND membership_status IN ('ACTIVE', 'FROZEN', 'UPCOMING')
+    `).all(memberId);
+
+    for (const ms of activeMemberships) {
+      db.db.prepare(`
+        UPDATE memberships
+        SET membership_status = 'EXPIRED',
+            end_date = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(yesterdayStr, ms.id);
+
+      db.db.prepare(`
+        INSERT INTO membership_status_history (membership_id, previous_status, new_status, reason, changed_by)
+        VALUES (?, 'ACTIVE', 'EXPIRED', 'Manual Test Expiry Triggered by Admin', ?)
+      `).run(ms.id, adminUser);
+    }
+
+    // 2. If no active membership was found, update the latest one
+    if (activeMemberships.length === 0) {
+      const latestMs = db.db.prepare(`
+        SELECT id FROM memberships WHERE member_id = ? ORDER BY start_date DESC, id DESC LIMIT 1
+      `).get(memberId);
+      if (latestMs) {
+        db.db.prepare(`
+          UPDATE memberships
+          SET membership_status = 'EXPIRED',
+              end_date = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(yesterdayStr, latestMs.id);
+      }
+    }
+
+    // 3. Update members table
+    db.db.prepare(`
+      UPDATE members
+      SET status = 'expired',
+          expiry_date = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(yesterdayStr, memberId);
+
+    // 4. Update system-wide membership and payment statuses
+    db.updateMembershipStatuses();
+
+    const updatedMember = db.getMemberById(memberId);
+
+    // 5. Revoke biometric entrance access directly on the Hikvision device
+    let hikvisionResult = { success: true };
+    try {
+      hikvisionResult = await hikvision.syncMemberToDevice(updatedMember);
+    } catch (hErr) {
+      console.error('[Hikvision Test Expire Error]:', hErr.message);
+      hikvisionResult = { success: false, message: hErr.message };
+    }
+
+    // 6. Log audit event
+    try {
+      db.logAudit(null, 'MANUAL_EXPIRE_TEST', 'members', memberId, null, null, `Manual test expiration triggered by ${adminUser}. Biometric turnstile access revoked.`);
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      message: `Membership for ${member.full_name} has been expired. Biometric turnstile access revoked.`,
+      hikvision: hikvisionResult,
+      member: updatedMember
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -848,10 +1064,99 @@ app.post('/api/memberships/:id/freeze', requireAuth, (req, res) => {
 
   try {
     const adminUser = req.session && req.session.adminUsername ? req.session.adminUsername : 'Admin';
-    db.freezeMembership(membershipId, parseInt(days), reason, adminUser);
-    res.json({ success: true, message: 'Membership frozen.' });
+    const result = db.freezeMembership(membershipId, parseInt(days), reason, adminUser);
+    const member = db.getMemberById(result.memberId);
+    if (member) {
+      try {
+        hikvision.syncMemberToDevice(member);
+      } catch (hErr) {
+        console.error('[Hikvision] Freeze sync error:', hErr);
+      }
+    }
+    res.json({
+      success: true,
+      message: `Membership frozen for ${days} days (until ${result.freezeEndDate}).`,
+      ...result
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/memberships/:id/unfreeze', requireAuth, (req, res) => {
+  const membershipId = parseInt(req.params.id);
+
+  try {
+    const adminUser = req.session && req.session.adminUsername ? req.session.adminUsername : 'Admin';
+    const result = db.unfreezeMembership(membershipId, adminUser);
+    const member = db.getMemberById(result.memberId);
+    if (member) {
+      try {
+        hikvision.syncMemberToDevice(member);
+      } catch (hErr) {
+        console.error('[Hikvision] Unfreeze sync error:', hErr);
+      }
+    }
+    res.json({
+      success: true,
+      message: `Membership unfrozen successfully. Extended by ${result.actualDaysFrozen} day(s) until ${result.newEndDate}.`,
+      ...result
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Directly update membership dates (start_date, end_date) freely
+app.put('/api/memberships/:id/dates', requireAuth, (req, res) => {
+  const membershipId = parseInt(req.params.id);
+  const { start_date, end_date } = req.body;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ error: 'Start date and end date are required.' });
+  }
+
+  try {
+    const ms = db.db.prepare('SELECT * FROM memberships WHERE id = ?').get(membershipId);
+    if (!ms) return res.status(404).json({ error: 'Membership not found.' });
+
+    const todayStr = db.getLocalDateStr(new Date());
+    const newStatus = (ms.membership_status === 'FROZEN') ? 'FROZEN' : (end_date >= todayStr ? 'ACTIVE' : 'EXPIRED');
+
+    db.db.prepare(`
+      UPDATE memberships
+      SET start_date = ?, end_date = ?, membership_status = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(start_date, end_date, newStatus, membershipId);
+
+    // Sync to members table
+    const member = db.getMemberById(ms.member_id);
+    if (member) {
+      const isLatest = db.db.prepare(`
+        SELECT id FROM memberships WHERE member_id = ? ORDER BY start_date DESC, id DESC LIMIT 1
+      `).get(ms.member_id)?.id === membershipId;
+
+      if (isLatest) {
+        const mStatus = (member.status === 'frozen') ? 'frozen' : (end_date >= todayStr ? 'active' : 'expired');
+        db.db.prepare(`
+          UPDATE members
+          SET join_date = ?, expiry_date = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(start_date, end_date, mStatus, ms.member_id);
+
+        const updatedMember = db.getMemberById(ms.member_id);
+        try {
+          hikvision.syncMemberToDevice(updatedMember);
+        } catch (hErr) {
+          console.error('[Hikvision Sync Error]:', hErr.message);
+        }
+      }
+    }
+
+    db.updateMembershipStatuses();
+    res.json({ success: true, message: 'Membership dates updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -924,42 +1229,44 @@ app.post('/api/hikvision/setup-lan', requireAuth, async (req, res) => {
 });
 
 // ─── REAL-TIME AUTH CHECK (called by Hikvision BEFORE opening door) ──────────
-// The device POSTs to this endpoint when someone scans their fingerprint.
-// We check DB and respond 200 (allow) or 401 (deny).
+// The device POSTs to this endpoint when someone scans their fingerprint or face.
+// We check DB and respond 200 (allow) or 401 (deny), and always record attendance.
 app.post('/api/hikvision/auth', async (req, res) => {
   try {
     const body = req.body;
-    // Extract Employee No from various Hikvision event formats
     let employeeNo =
       (body.AccessControllerEvent && body.AccessControllerEvent.employeeNoString) ||
       body.employeeNo ||
       body.EmployeeNo ||
       (body.UserInfo && body.UserInfo.employeeNo);
+    const eventName =
+      body.name ||
+      (body.AccessControllerEvent && body.AccessControllerEvent.name) ||
+      (body.UserInfo && body.UserInfo.name) ||
+      null;
 
-    if (!employeeNo) {
-      console.log('[Hikvision Auth] Request received but employeeNo missing:', JSON.stringify(body));
-      return res.status(400).json({ success: false, message: 'employeeNo not found' });
-    }
-
-    const phoneDigits = String(employeeNo).replace(/\D/g, '');
     const allMembers = db.getAllMembers('', 'all');
-    const member = allMembers.find(m => String(m.phone).replace(/\D/g, '') === phoneDigits);
+    const member = hikvision.resolveMemberFromHikvisionEvent(
+      { employeeNo, employeeNoString: employeeNo, name: eventName },
+      allMembers
+    );
     const eventTime = body.time || body.dateTime || null;
 
     if (!member) {
-      console.log(`[Hikvision Auth] DENIED - Employee ID ${phoneDigits} not found in database.`);
+      console.log(`[Hikvision Auth] DENIED - Unrecognized scan (employeeNo: ${employeeNo || 'none'}, name: ${eventName || 'none'}).`);
       return res.status(401).json({ success: false, message: 'Member not found', action: 'deny' });
     }
 
+    // Always record attendance for any recognized gym member scan
+    const attendance = db.recordAttendance(member.id, eventTime);
+    const shiftMsg = attendance.duplicate ? '(already checked in today)' : `(${attendance.shift} shift)`;
+
     if (member.status === 'active') {
-      // Auto-record attendance on successful access
-      const attendance = db.recordAttendance(member.id, eventTime);
-      const shiftMsg = attendance.duplicate ? '(already checked in)' : `(${attendance.shift} shift)`;
-      console.log(`[Hikvision Auth] GRANTED - ${member.full_name} (${phoneDigits}) - Active member. Attendance: ${shiftMsg}`);
+      console.log(`[Hikvision Auth] GRANTED - ${member.full_name} (${member.phone}). Attendance: ${shiftMsg}`);
       return res.status(200).json({ success: true, message: 'Access granted', action: 'open' });
     } else {
-      console.log(`[Hikvision Auth] DENIED - ${member.full_name} (${phoneDigits}) - Status: ${member.status}`);
-      return res.status(401).json({ success: false, message: 'Membership expired', action: 'deny' });
+      console.log(`[Hikvision Auth] DENIED - ${member.full_name} (${member.phone}) - Status: ${member.status}. Attendance logged: ${shiftMsg}`);
+      return res.status(401).json({ success: false, message: `Membership is ${member.status}`, action: 'deny' });
     }
   } catch (err) {
     console.error('[Hikvision Auth] Error:', err);
@@ -967,29 +1274,27 @@ app.post('/api/hikvision/auth', async (req, res) => {
   }
 });
 
-// Legacy event webhook (fires AFTER door opens - kept for logging)
+// Legacy event webhook (fires AFTER door opens - kept for logging and backup attendance)
 app.post('/api/hikvision/event', async (req, res) => {
-  // Usually this does not requireAuth because it comes directly from the device
   const eventData = req.body;
-  
-  // Extract employeeNo depending on the exact payload structure your Hikvision sends
-  // This is a placeholder extraction based on common ISAPI event structures
   let employeeNo = null;
   let eventTime = null;
+  let eventName = eventData.name || null;
   
-  if (eventData && eventData.AccessControllerEvent && eventData.AccessControllerEvent.employeeNoString) {
-    employeeNo = eventData.AccessControllerEvent.employeeNoString;
+  if (eventData && eventData.AccessControllerEvent) {
+    employeeNo = eventData.AccessControllerEvent.employeeNoString || eventData.AccessControllerEvent.employeeNo;
     eventTime = eventData.dateTime || eventData.time || null;
+    if (eventData.AccessControllerEvent.name) eventName = eventData.AccessControllerEvent.name;
   } else if (eventData && eventData.employeeNo) {
     employeeNo = eventData.employeeNo;
     eventTime = eventData.time || null;
   }
 
-  if (!employeeNo) {
-    return res.status(400).json({ success: false, message: 'employeeNo not found in event payload' });
+  if (!employeeNo && !eventName) {
+    return res.status(400).json({ success: false, message: 'employeeNo or name not found in event payload' });
   }
 
-  const result = await hikvision.handleFingerprintEvent(employeeNo, eventTime);
+  const result = await hikvision.handleFingerprintEvent(employeeNo, eventTime, eventName);
   res.json(result);
 });
 
@@ -998,6 +1303,16 @@ app.get('/api/hikvision/sync', requireAuth, async (req, res) => {
   try {
     const result = await hikvision.pollAndRecordAttendance();
     res.json({ success: true, message: 'Sync complete', result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Manual biometric backup endpoint (scans all users on machine and stores their templates in SQLite)
+app.post('/api/hikvision/backup-biometrics', requireAuth, async (req, res) => {
+  try {
+    const result = await hikvision.backupAllEnrolledBiometrics();
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1065,7 +1380,7 @@ app.post('/api/sms/test-send', requireAuth, async (req, res) => {
     const body = {
       auth_token: token,
       to: phone,
-      text: 'Fit24 Gym Test: This is a diagnostic test message from your GymPro system!'
+      text: 'Powerzone Fitness Test: This is a diagnostic test message from your Powerzone Fitness system!'
     };
     
     const smsRes = await fetch('https://sms.aakashsms.com/sms/v3/send', {
@@ -1163,4 +1478,5 @@ app.listen(PORT, () => {
 
   // Start notification scheduler
   startScheduler();
+  db.updatePaymentStatuses();
 });

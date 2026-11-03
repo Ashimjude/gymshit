@@ -70,7 +70,7 @@ async function sendSMS(phone, message) {
 // Notify a single member
 async function notifyMember(member, type, force = false) {
   // Check if we already notified recently (only if not forced)
-  if (!force && db.hasRecentNotification(member.id, type)) {
+  if (!force && db.hasRecentNotification(member.id, null, 20)) {
     console.log(`⏭️  Skipping ${member.full_name} — already notified recently.`);
     return { success: false, reason: 'already_notified' };
   }
@@ -82,15 +82,35 @@ async function notifyMember(member, type, force = false) {
   const diffDays = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
 
   let message;
-  if (type === 'expiry_warning') {
-    message = `Dear Customer,
-Your membership at Fit24 Gym and Fitness will expire in 3 days. Please renew your membership before the expiry date.
+  if (type === 'manual_reminder' || type === 'manual') {
+    // Manually triggered by admin for a customer
+    if (diffDays > 0) {
+      message = `Dear Customer, you have ${diffDays} day${diffDays === 1 ? '' : 's'} remaining for your membership to get expired at Powerzone Fitness. Please renew your membership before the expiry date.
 Thank you,
-Fit24 Gym and Fitness`;
+Powerzone Fitness`;
+    } else if (diffDays === 0) {
+      message = `Dear Customer, your membership at Powerzone Fitness expires today. Please renew your membership to continue accessing our facilities.
+Thank you,
+Powerzone Fitness`;
+    } else {
+      message = `Dear Customer, your membership at Powerzone Fitness expired ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'} ago. Please renew your membership to continue accessing our facilities.
+Thank you,
+Powerzone Fitness`;
+    }
+  } else if (type === 'expiry_warning') {
+    // Automated reminder sent 2 days before
+    message = `Dear Customer,
+Your membership at Powerzone Fitness will expire in 2 days. Please renew your membership before the expiry date.
+Thank you,
+Powerzone Fitness`;
   } else if (type === 'expired') {
-    message = `Dear Customer, your membership at Fit24 Gym and Fitness expires today. Please renew your membership to continue accessing our facilities. Thank you!`;
+    message = `Dear Customer, your membership at Powerzone Fitness expires today. Please renew your membership to continue accessing our facilities.
+Thank you,
+Powerzone Fitness`;
   } else {
-    message = 'Gym Membership Expired - Fit24 Health And Fitness Club';
+    message = `Dear Customer, this is a reminder from Powerzone Fitness regarding your membership.
+Thank you,
+Powerzone Fitness`;
   }
 
   const result = await sendSMS(member.phone, message);
@@ -133,7 +153,7 @@ async function runDailyCheck() {
     }
   }
 
-  const daysBeforeNotify = parseInt(process.env.NOTIFY_DAYS_BEFORE) || 3;
+  const daysBeforeNotify = parseInt(process.env.NOTIFY_DAYS_BEFORE) || 2;
 
   // Notify members expiring soon (within N days)
   const expiringSoon = db.getMembersExpiringSoon(daysBeforeNotify);
@@ -147,12 +167,10 @@ async function runDailyCheck() {
 
     const diffDays = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) {
-      await notifyMember(member, 'expired');
-    } else if (diffDays === 3) {
+    if (diffDays === 2) {
       await notifyMember(member, 'expiry_warning');
     } else {
-      console.log(`⏭️  Skipping ${member.full_name} — diffDays is ${diffDays} (notifications are only sent at 3 days before or on the day).`);
+      console.log(`⏭️  Skipping ${member.full_name} — diffDays is ${diffDays} (automated notification is only sent once, exactly 2 days before expiry).`);
     }
   }
 
@@ -170,18 +188,21 @@ function startScheduler() {
 
   console.log('⏰ Notification scheduler started (runs daily at 9:00 AM).');
 
-  // Poll Hikvision device every 5 seconds for attendance events
-  cron.schedule('*/5 * * * * *', () => {
+  // Poll Hikvision device every 15 seconds for attendance events
+  cron.schedule('*/15 * * * * *', () => {
     hikvision.pollAndRecordAttendance();
   });
 
-  console.log('📋 Attendance polling started (every 5 seconds from Hikvision device).');
+  console.log('📋 Attendance polling started (every 15 seconds from Hikvision device).');
 
   // Also run immediately on startup
   setTimeout(() => {
     runDailyCheck();
     hikvision.pollAndRecordAttendance();
-  }, 2000);
+    if (typeof hikvision.backupAllEnrolledBiometrics === 'function') {
+      hikvision.backupAllEnrolledBiometrics().catch(() => {});
+    }
+  }, 3000);
 }
 
 module.exports = { startScheduler, sendSMS, notifyMember, runDailyCheck, initSMS };
